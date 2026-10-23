@@ -307,14 +307,27 @@ def render_chat(tokenizer: Any, messages: Sequence[Mapping[str, str]], *, add_ge
 def tokenize_supervised_example(
     tokenizer: Any, messages: Sequence[Mapping[str, str]], *, max_length: int = 1024,
 ) -> dict[str, Any]:
-    """Tokenize chat and supervise assistant body plus each assistant <|im_end|>."""
+    """Tokenize chat once and supervise assistant body plus each assistant <|im_end|>.
+
+    Prefixes are not necessarily token-prefixes for BPE tokenizers: tokenizing a
+    string by itself can produce different IDs than tokenizing it as part of a
+    longer string. Use character offsets from the full fast-tokenizer result so
+    the loss mask follows the actual input IDs.
+    """
     messages = validate_messages(messages, require_system=True)
     rendered = render_chat(tokenizer, messages)
-    ids = list(tokenizer.encode(rendered, add_special_tokens=False))
+    try:
+        encoded = tokenizer(rendered, add_special_tokens=False, return_offsets_mapping=True)
+        ids = list(encoded["input_ids"])
+        offsets = list(encoded["offset_mapping"])
+    except (KeyError, NotImplementedError, TypeError, ValueError) as exc:
+        raise ValueError("fast tokenizer offset mappings are required for safe assistant loss masking") from exc
+    if len(ids) != len(offsets):
+        raise ValueError("tokenizer returned different counts of token IDs and character offsets")
     im_start = getattr(tokenizer, "im_start_token", "<|im_start|>")
     im_end = getattr(tokenizer, "im_end_token", "<|im_end|>")
     search_from = 0
-    spans: list[tuple[int, int, int]] = []
+    assistant_spans: list[tuple[int, int]] = []
     for message in messages:
         header = f"{im_start}{message['role']}\n"
         header_at = rendered.find(header, search_from)
@@ -328,19 +341,26 @@ def tokenize_supervised_example(
         if not rendered.startswith(im_end, end_at):
             raise ValueError("chat template did not place the expected end marker after message content")
         end_marker_end = end_at + len(im_end)
-        # Token count of prefixes gives token boundaries while special markers isolate messages.
-        start_tok = len(tokenizer.encode(rendered[:content_start], add_special_tokens=False))
-        end_tok = len(tokenizer.encode(rendered[:end_marker_end], add_special_tokens=False))
-        prefix_ids = list(tokenizer.encode(rendered[:content_start], add_special_tokens=False))
-        through_ids = list(tokenizer.encode(rendered[:end_marker_end], add_special_tokens=False))
-        if ids[:len(prefix_ids)] != prefix_ids or ids[:len(through_ids)] != through_ids:
-            raise ValueError("tokenizer prefix alignment changed; refusing to guess assistant loss mask")
-        spans.append((start_tok, end_tok, 1 if message["role"] == "assistant" else 0))
+        if message["role"] == "assistant":
+            assistant_spans.append((content_start, end_marker_end))
         search_from = end_marker_end
     labels = [-100] * len(ids)
-    for start, end, assistant in spans:
-        if assistant:
-            labels[start:end] = ids[start:end]
+    for token_index, (token_start, token_end) in enumerate(offsets):
+        token_start, token_end = int(token_start), int(token_end)
+        if token_start == token_end:
+            continue
+        if token_start < 0 or token_end < token_start or token_end > len(rendered):
+            raise ValueError("tokenizer returned an invalid character offset")
+        overlaps = [span for span in assistant_spans
+                    if token_start < span[1] and token_end > span[0]]
+        if not overlaps:
+            continue
+        if len(overlaps) != 1 or token_start < overlaps[0][0] or token_end > overlaps[0][1]:
+            raise ValueError(
+                "tokenizer token crosses an assistant loss-mask boundary; refusing to guess "
+                f"(character offsets {token_start}:{token_end})"
+            )
+        labels[token_index] = ids[token_index]
     if max_length < 1:
         raise ValueError("max_length must be positive")
     truncated = len(ids) > max_length

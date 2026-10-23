@@ -66,3 +66,19 @@ def test_chat_format_masks_non_assistant_and_includes_assistant_end_token():
     assert_supervised_decode(tokenizer, messages, feature)
     assert [label for label in feature["labels"] if label != -100][-1] == 2
     assert feature["labels"].count(-100) > 0
+
+
+def test_chat_loss_mask_uses_offsets_from_full_rendered_text():
+    class OffsetOnlyTokenizer(FakeTokenizer):
+        def encode(self, text, add_special_tokens=False):
+            raise AssertionError("loss masking must not tokenize prefixes independently")
+
+    tokenizer = OffsetOnlyTokenizer()
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": "Explain a firewall."},
+        {"role": "assistant", "content": "It filters traffic."},
+    ]
+    feature = tokenize_supervised_example(tokenizer, messages, max_length=2048)
+    assert_supervised_decode(tokenizer, messages, feature)
+    assert [label for label in feature["labels"] if label != -100][-1] == 2

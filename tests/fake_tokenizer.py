@@ -34,6 +34,25 @@ class FakeTokenizer:
                 i += 1
         return ids
 
+    def __call__(self, text, *, add_special_tokens=False, return_offsets_mapping=False, **kwargs):
+        ids = []
+        offsets = []
+        i = 0
+        while i < len(text):
+            matched = next((token for token in (self.im_start_token, self.im_end_token) if text.startswith(token, i)), None)
+            if matched:
+                ids.append(self._special_to_id[matched])
+                offsets.append((i, i + len(matched)))
+                i += len(matched)
+            else:
+                ids.append(ord(text[i]) + 1000)
+                offsets.append((i, i + 1))
+                i += 1
+        result = {"input_ids": ids}
+        if return_offsets_mapping:
+            result["offset_mapping"] = offsets
+        return result
+
     def decode(self, ids, skip_special_tokens=False, clean_up_tokenization_spaces=False):
         output = []
         for token_id in ids:
