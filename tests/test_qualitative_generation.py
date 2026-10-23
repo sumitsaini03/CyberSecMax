@@ -69,3 +69,7 @@ def test_qualitative_generation_unpacks_batch_encoding():
 def test_full_training_receives_tokenizer_explicitly():
     parameters = inspect.signature(train_cyber_lora.train_model).parameters
     assert "tokenizer" in parameters
+
+
+def test_warmup_ratio_converts_to_step_count_for_new_transformers_api():
+    assert train_cyber_lora.warmup_steps_from_ratio(650, 1, 16, 3, 0.03) == 3

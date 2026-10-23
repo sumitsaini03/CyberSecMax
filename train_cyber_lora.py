@@ -714,6 +714,17 @@ def run_preflight(root: Path, config: Mapping[str, Any], tokenizer: Any, revisio
     return result
 
 
+def warmup_steps_from_ratio(train_examples: int, batch_size: int, gradient_accumulation_steps: int,
+                            epochs: int, warmup_ratio: float) -> int:
+    """Translate warmup_ratio for Transformers releases that only accept warmup_steps."""
+    if train_examples < 1 or batch_size < 1 or gradient_accumulation_steps < 1 or epochs < 1:
+        raise ValueError("training dimensions must be positive")
+    if not 0.0 <= warmup_ratio <= 1.0:
+        raise ValueError("warmup_ratio must be between 0 and 1")
+    updates_per_epoch = math.ceil(train_examples / (batch_size * gradient_accumulation_steps))
+    return int(updates_per_epoch * epochs * warmup_ratio)
+
+
 def train_model(root: Path, config: Mapping[str, Any], tokenizer: Any,
                 train_features: Sequence[Mapping[str, Any]], monitor_features: Sequence[Mapping[str, Any]],
                 model_id: str, revision: str,
@@ -741,7 +752,6 @@ def train_model(root: Path, config: Mapping[str, Any], tokenizer: Any,
         "gradient_accumulation_steps": int(tcfg["gradient_accumulation_steps"]),
         "num_train_epochs": epochs,
         "learning_rate": learning_rate,
-        "warmup_ratio": float(tcfg["warmup_ratio"]),
         "lr_scheduler_type": "cosine",
         "weight_decay": float(tcfg["weight_decay"]),
         "max_grad_norm": float(tcfg["max_grad_norm"]),
@@ -762,8 +772,21 @@ def train_model(root: Path, config: Mapping[str, Any], tokenizer: Any,
         "seed": int(config["seed"]),
         "data_seed": int(config["seed"]),
     }
+    warmup_ratio = float(tcfg["warmup_ratio"])
+    if "warmup_ratio" in sig:
+        args_values["warmup_ratio"] = warmup_ratio
+    elif "warmup_steps" in sig:
+        args_values["warmup_steps"] = warmup_steps_from_ratio(
+            len(train_features), int(tcfg["per_device_batch_size"]),
+            int(tcfg["gradient_accumulation_steps"]), epochs, warmup_ratio,
+        )
+    else:
+        raise ExperimentError("Installed Transformers TrainingArguments supports neither warmup_ratio nor warmup_steps.")
     if "gradient_checkpointing_kwargs" in sig:
         args_values["gradient_checkpointing_kwargs"] = {"use_reentrant": False}
+    unsupported_args = sorted(set(args_values) - set(sig))
+    if unsupported_args:
+        raise ExperimentError(f"Installed Transformers TrainingArguments does not support: {unsupported_args}")
     args = TrainingArguments(**args_values)
     pad_id = tokenizer.pad_token_id
     def collator(items: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
