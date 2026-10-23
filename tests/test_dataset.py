@@ -82,3 +82,51 @@ def test_chat_loss_mask_uses_offsets_from_full_rendered_text():
     feature = tokenize_supervised_example(tokenizer, messages, max_length=2048)
     assert_supervised_decode(tokenizer, messages, feature)
     assert [label for label in feature["labels"] if label != -100][-1] == 2
+
+
+def test_chat_loss_mask_supervises_indivisible_token_crossing_answer_start():
+    class BoundaryMergeTokenizer(FakeTokenizer):
+        def __call__(self, text, *, add_special_tokens=False, return_offsets_mapping=False, **kwargs):
+            ids = []
+            offsets = []
+            i = 0
+            while i < len(text):
+                matched = next((token for token in (self.im_start_token, self.im_end_token)
+                                if text.startswith(token, i)), None)
+                if matched:
+                    ids.append(self._special_to_id[matched])
+                    offsets.append((i, i + len(matched)))
+                    i += len(matched)
+                elif text[i] == "\n" and i + 1 < len(text):
+                    ids.append(50000 + ord(text[i + 1]))
+                    offsets.append((i, i + 2))
+                    i += 2
+                else:
+                    ids.append(ord(text[i]) + 1000)
+                    offsets.append((i, i + 1))
+                    i += 1
+            result = {"input_ids": ids}
+            if return_offsets_mapping:
+                result["offset_mapping"] = offsets
+            return result
+
+        def decode(self, ids, skip_special_tokens=False, clean_up_tokenization_spaces=False):
+            expanded = []
+            for token_id in ids:
+                token_id = int(token_id)
+                if token_id >= 50000:
+                    expanded.extend([1000 + ord("\n"), 1000 + token_id - 50000])
+                else:
+                    expanded.append(token_id)
+            return super().decode(expanded, skip_special_tokens, clean_up_tokenization_spaces)
+
+    tokenizer = BoundaryMergeTokenizer()
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": "Explain a firewall."},
+        {"role": "assistant", "content": "It filters traffic."},
+    ]
+    feature = tokenize_supervised_example(tokenizer, messages, max_length=2048)
+    assert_supervised_decode(tokenizer, messages, feature)
+    supervised = [token for token, label in zip(feature["input_ids"], feature["labels"]) if label != -100]
+    assert tokenizer.decode(supervised, skip_special_tokens=False).startswith("\nI")

@@ -48,7 +48,7 @@ See [dataset_metadata.json](dataset_metadata.json) for the dated inventory and [
 7. Train the adapter with gradient checkpointing, per-device batch size 1, accumulation 16, rank 16, alpha 32, dropout 0.05, and the profile-specific rate/epoch settings.
 8. Load a fresh base plus the unmerged adapter. Verify adapter-disabled validation loss matches baseline, evaluate the adapter-enabled model with the same token IDs, and save full prediction records and paired metrics.
 
-All training/evaluation tokenization uses the chat template and supervises assistant content plus `<|im_end|>`. Validation loss uses causal shifting, float32 log probabilities, masks `-100` labels/padding, and divides the total negative log probability by total valid target tokens. CyberMetric first validates one-token label IDs at the answer boundary; it falls back to full-sequence label likelihood when necessary. Its primary endpoint is original-order accuracy; four cyclic option rotations are secondary.
+All training/evaluation tokenization uses the chat template. The loss mask comes from character offsets in the full rendered tokenization. If one indivisible subword token overlaps an assistant-span boundary, the whole token is supervised; a token overlapping multiple assistant spans stops preflight. Validation loss uses causal shifting, float32 log probabilities, masks `-100` labels/padding, and divides the total negative log probability by total valid target tokens. CyberMetric first validates one-token label IDs at the answer boundary; it falls back to full-sequence label likelihood when necessary. Its primary endpoint is original-order accuracy; four cyclic option rotations are secondary.
 
 ## Google Colab setup
 

@@ -1,8 +1,8 @@
 # Verification and Audit Report
 
 **Checked:** 2026-10-23 (Asia/Calcutta)
-**Status:** source repository implemented; actual Colab experiment pending
-**Publication:** not published to GitHub from this environment; see §12.
+**Status:** source repository implemented; actual Colab preflight is in progress
+**Publication:** public repository at [sumitsaini03/CyberSecMax](https://github.com/sumitsaini03/CyberSecMax); latest code update is tracked in §9.
 
 ## 1. Audit scope and authoritative source checks
 
@@ -33,7 +33,7 @@ No source dataset rows were downloaded or committed in the authoring environment
 | Tier 1 scope filtering is keyword/regex triage, not semantic safety review. | Seven named rules are applied in order. Counts are recorded; a seeded reservoir of removed and retained records is saved only under the local output root for human review. The report states false-positive/false-negative limits. |
 | “Question stem” for contamination Level 2 was not operationally defined. | The code defines a conservative stem as the normalized full question with its final whitespace token removed (when the question has at least six tokens), paired with the correct answer. Level 1 is full normalized question containment; Level 3 is 5-gram Jaccard ≥ 0.8. |
 | Original CyberMetric materials use an XML answer format, while the supplied brief pre-registers single-letter next-token scoring. | Follow the supplied brief; record that this is not an exact reproduction of the upstream evaluator prompt. Validate answer tokens at the boundary and use consistent full-sequence likelihood if needed. |
-| The current Qwen chat template injects a Qwen default system instruction if no explicit system message is supplied. | Insert `SYSTEM_PROMPT` into every normalized conversation and every evaluation/generation prompt; hash the live chat template and fail if token-mask alignment is ambiguous. |
+| The current Qwen chat template injects a Qwen default system instruction if no explicit system message is supplied. | Insert `SYSTEM_PROMPT` into every normalized conversation and every evaluation/generation prompt. Derive masks from full-render token offsets; supervise an indivisible token overlapping one assistant-span boundary and stop if it overlaps multiple assistant spans. |
 | The brief’s desk-check stated no dataset rows were inspected. | This audit reviewed public cards only. No row-derived count, schema, hash, answer distribution, or access permission is reported as actually inspected. The live script performs required authenticated inspection. |
 | 7B/4-bit/T4 and dependency compatibility cannot be inferred from configuration values. | GPU, VRAM, 4-bit loading, target modules, finite pilot loss/gradients, adapter save/reload, and throughput are runtime assertions. This environment cannot execute those checks. The candidate dependency stack is pinned but explicitly marked untested. |
 | A lower validation loss does not guarantee cybersecurity capability improvement; held-out benchmark use for tuning would invalidate the endpoint. | Benchmark metrics never drive training choices or checkpoint selection. T2 uses training validation loss; T1 uses final checkpoint unless it diverges. Findings of either direction are valid. |
@@ -48,6 +48,7 @@ No source dataset rows were downloaded or committed in the authoring environment
 5. `requirements-colab.txt` pins the current candidate Transformers/PEFT/bitsandbytes/Datasets/Accelerate/Hub/PyYAML versions checked from PyPI. PyTorch is inherited from Colab to preserve its CUDA-matched wheel. This set has not passed a pilot. The authoring machine reports an RTX 3050 with 6 GiB VRAM, but has no PyTorch/Transformers runtime; the project is not GPU-verified. The preflight must pass in the actual Colab runtime before a full run.
 6. Benchmark baseline and trained predictions save row index, answer letters, scoring values, and hashes, but no benchmark question or answer text. The benchmark mirror/original license terms do not clearly authorize text redistribution.
 7. Five qualitative outputs are saved; blinded pass/fail rubric counts remain pending manual review. The implementation does not fabricate a rating or use an unregistered evaluator.
+8. Loss masks use character offsets from the full rendered tokenization. Since subword tokens cannot be split, a token overlapping one assistant-span edge is supervised whole; a token overlapping multiple assistant spans fails closed.
 
 ## 4. Local environment and dataset status
 
@@ -99,7 +100,7 @@ The following results are from commands executed in this checkout; no GPU/data c
 | Command | Result |
 |---|---|
 | `python -m compileall -q train_cyber_lora.py cyber_lora_utils.py scripts tests` | **PASS** |
-| `python -m pytest -q` | **PASS**: 21 passed, 1 skipped (optional PyTorch-only test; PyTorch is absent) |
+| `python -m pytest -q` | **PASS**: 23 passed, 1 skipped (optional PyTorch-only test; PyTorch is absent) |
 | `python scripts/validate_notebook.py SecurityMaxx.ipynb` | **PASS**: nbformat 4 JSON and required workflow sections |
 | YAML parse for `configs/experiment.yaml` and `configs/scope_filter.yaml` | **PASS** |
 | `nvidia-smi` | **PASS**: RTX 3050, 6,144 MiB total; this does not verify PyTorch/CUDA compatibility or 7B fit |
@@ -107,6 +108,8 @@ The following results are from commands executed in this checkout; no GPU/data c
 | CUDA/4-bit load/T4 pilot/checkpoint reload/full training | **NOT RUN**: PyTorch/Transformers/PEFT/bitsandbytes and authorized gated dataset access are unavailable locally |
 
 The test suite uses synthetic samples. An optional tiny PyTorch validation-loss test is skipped when PyTorch is absent; passing synthetic tests do not prove full model compatibility.
+
+In the user's Colab on 2026-10-23, the Tesla T4 was visible and all dataset files were accessible. Primus-Instruct loaded 835 examples. Preflight then exposed a tokenizer loss-mask boundary case; the current offset-based implementation handles a single indivisible boundary token deterministically. A complete Colab preflight and GPU pilot remain pending.
 
 ## 8. Expected artifacts, recovery, and known limitations
 
@@ -121,4 +124,4 @@ If Drive is unavailable/unwritable, the program fails with a recovery message. I
 
 ## 9. GitHub publication status
 
-Published public repository: [sumitsaini03/CyberSecMax](https://github.com/sumitsaini03/CyberSecMax). Commit `526083a4ca1c9a41833620cc2b141636d31deae4` was pushed to `main`. GitHub Actions run `39910640515` completed successfully for the repository checks workflow. The connector itself remains unlinked; publication used the authenticated Chrome session and Git's existing credential helper.
+Published public repository: [sumitsaini03/CyberSecMax](https://github.com/sumitsaini03/CyberSecMax). The initial implementation and subsequent fixes are published on `main`. The latest change derives assistant loss masks from full-tokenization offsets and handles an indivisible token crossing one assistant boundary. Local checks pass (23 tests, 1 optional PyTorch test skipped); the Colab preflight is still pending. GitHub Actions run `39910640515` passed on the initial implementation. Publication used the authenticated Git credential helper.

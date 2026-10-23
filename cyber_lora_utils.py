@@ -304,26 +304,9 @@ def render_chat(tokenizer: Any, messages: Sequence[Mapping[str, str]], *, add_ge
     )
 
 
-def tokenize_supervised_example(
-    tokenizer: Any, messages: Sequence[Mapping[str, str]], *, max_length: int = 1024,
-) -> dict[str, Any]:
-    """Tokenize chat once and supervise assistant body plus each assistant <|im_end|>.
-
-    Prefixes are not necessarily token-prefixes for BPE tokenizers: tokenizing a
-    string by itself can produce different IDs than tokenizing it as part of a
-    longer string. Use character offsets from the full fast-tokenizer result so
-    the loss mask follows the actual input IDs.
-    """
-    messages = validate_messages(messages, require_system=True)
-    rendered = render_chat(tokenizer, messages)
-    try:
-        encoded = tokenizer(rendered, add_special_tokens=False, return_offsets_mapping=True)
-        ids = list(encoded["input_ids"])
-        offsets = list(encoded["offset_mapping"])
-    except (KeyError, NotImplementedError, TypeError, ValueError) as exc:
-        raise ValueError("fast tokenizer offset mappings are required for safe assistant loss masking") from exc
-    if len(ids) != len(offsets):
-        raise ValueError("tokenizer returned different counts of token IDs and character offsets")
+def _assistant_char_spans(
+    tokenizer: Any, messages: Sequence[Mapping[str, str]], rendered: str,
+) -> list[tuple[int, int]]:
     im_start = getattr(tokenizer, "im_start_token", "<|im_start|>")
     im_end = getattr(tokenizer, "im_end_token", "<|im_end|>")
     search_from = 0
@@ -337,27 +320,57 @@ def tokenize_supervised_example(
         content_end = content_start + len(message["content"])
         if rendered[content_start:content_end] != message["content"]:
             raise ValueError("chat template altered message text; refusing unsafe loss-mask alignment")
-        end_at = content_end
-        if not rendered.startswith(im_end, end_at):
+        if not rendered.startswith(im_end, content_end):
             raise ValueError("chat template did not place the expected end marker after message content")
-        end_marker_end = end_at + len(im_end)
+        end_marker_end = content_end + len(im_end)
         if message["role"] == "assistant":
             assistant_spans.append((content_start, end_marker_end))
         search_from = end_marker_end
+    return assistant_spans
+
+
+def _tokenizer_offsets(tokenizer: Any, rendered: str) -> tuple[list[int], list[tuple[int, int]]]:
+    try:
+        encoded = tokenizer(rendered, add_special_tokens=False, return_offsets_mapping=True)
+        ids = list(encoded["input_ids"])
+        offsets = [(int(start), int(end)) for start, end in encoded["offset_mapping"]]
+    except (KeyError, NotImplementedError, TypeError, ValueError) as exc:
+        raise ValueError("fast tokenizer offset mappings are required for safe assistant loss masking") from exc
+    if len(ids) != len(offsets):
+        raise ValueError("tokenizer returned different counts of token IDs and character offsets")
+    for start, end in offsets:
+        if start < 0 or end < start or end > len(rendered):
+            raise ValueError("tokenizer returned an invalid character offset")
+    return ids, offsets
+
+
+def tokenize_supervised_example(
+    tokenizer: Any, messages: Sequence[Mapping[str, str]], *, max_length: int = 1024,
+) -> dict[str, Any]:
+    """Tokenize chat once and supervise assistant body plus each assistant <|im_end|>.
+
+    Prefixes are not necessarily token-prefixes for BPE tokenizers: tokenizing a
+    string by itself can produce different IDs than tokenizing it as part of a
+    longer string. Use character offsets from the full fast-tokenizer result so
+    the loss mask follows the actual input IDs. If a token straddles one
+    assistant-span edge, it is indivisible and is supervised as a whole; a
+    token overlapping multiple assistant spans remains an error.
+    """
+    messages = validate_messages(messages, require_system=True)
+    rendered = render_chat(tokenizer, messages)
+    ids, offsets = _tokenizer_offsets(tokenizer, rendered)
+    assistant_spans = _assistant_char_spans(tokenizer, messages, rendered)
     labels = [-100] * len(ids)
     for token_index, (token_start, token_end) in enumerate(offsets):
-        token_start, token_end = int(token_start), int(token_end)
         if token_start == token_end:
             continue
-        if token_start < 0 or token_end < token_start or token_end > len(rendered):
-            raise ValueError("tokenizer returned an invalid character offset")
         overlaps = [span for span in assistant_spans
                     if token_start < span[1] and token_end > span[0]]
         if not overlaps:
             continue
-        if len(overlaps) != 1 or token_start < overlaps[0][0] or token_end > overlaps[0][1]:
+        if len(overlaps) != 1:
             raise ValueError(
-                "tokenizer token crosses an assistant loss-mask boundary; refusing to guess "
+                "tokenizer token overlaps multiple assistant loss-mask spans; refusing to guess "
                 f"(character offsets {token_start}:{token_end})"
             )
         labels[token_index] = ids[token_index]
@@ -369,15 +382,32 @@ def tokenize_supervised_example(
 
 
 def assert_supervised_decode(tokenizer: Any, messages: Sequence[Mapping[str, str]], feature: Mapping[str, Any]) -> None:
-    """Check the assistant-token contract on each complete, untruncated turn."""
+    """Check assistant-target token offsets on each complete, untruncated turn."""
     if feature.get("truncated"):
         raise ValueError("decode assertion requires an untruncated sample")
-    im_end = getattr(tokenizer, "im_end_token", "<|im_end|>")
     ids, labels = feature["input_ids"], feature["labels"]
-    # Re-align in order: each assistant content followed by one end marker.
-    supervised = [token for token, label in zip(ids, labels) if label != -100]
+    rendered = render_chat(tokenizer, messages)
+    full_ids, offsets = _tokenizer_offsets(tokenizer, rendered)
+    assistant_spans = _assistant_char_spans(tokenizer, messages, rendered)
+    if list(ids) != full_ids:
+        raise AssertionError("feature token IDs differ from the full rendered chat tokenization")
+    expected_indices: list[int] = []
+    expected_parts: list[str] = []
+    for span in assistant_spans:
+        overlapping = [i for i, (start, end) in enumerate(offsets)
+                       if start < span[1] and end > span[0]]
+        if not overlapping:
+            raise AssertionError("assistant span has no overlapping tokenizer offsets")
+        expected_parts.append(rendered[offsets[overlapping[0]][0]:offsets[overlapping[-1]][1]])
+        expected_indices.extend(overlapping)
+    if len(expected_indices) != len(set(expected_indices)):
+        raise AssertionError("one tokenizer token overlaps multiple assistant spans")
+    supervised_indices = [i for i, label in enumerate(labels) if label != -100]
+    if supervised_indices != expected_indices:
+        raise AssertionError("loss labels do not match tokens overlapping assistant text spans")
+    supervised = [ids[i] for i in supervised_indices]
     decoded = tokenizer.decode(supervised, skip_special_tokens=False, clean_up_tokenization_spaces=False)
-    expected = "".join(m["content"] + im_end for m in messages if m["role"] == "assistant")
+    expected = "".join(expected_parts)
     if decoded != expected:
         raise AssertionError(f"supervised decode mismatch: expected {expected!r}, got {decoded!r}")
 
