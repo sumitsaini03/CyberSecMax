@@ -377,7 +377,32 @@ def tokenize_supervised_example(
     if max_length < 1:
         raise ValueError("max_length must be positive")
     truncated = len(ids) > max_length
-    ids, labels = ids[:max_length], labels[:max_length]
+    if truncated:
+        # Training rows must retain the final assistant answer. Right-truncating
+        # long chat histories can remove every supervised token and make the
+        # causal-LM loss NaN. Keep the last answer with as much recent context
+        # as fits; if that answer alone exceeds the cap, keep its beginning.
+        final_span = assistant_spans[-1]
+        final_target_indices = [
+            index for index, (start, end) in enumerate(offsets)
+            if start < final_span[1] and end > final_span[0]
+        ]
+        if not final_target_indices:
+            raise ValueError("final assistant message has no tokenizer tokens to supervise")
+        if len(final_target_indices) > max_length:
+            im_start = getattr(tokenizer, "im_start_token", "<|im_start|>")
+            header_start = rendered.rfind(im_start, 0, final_span[0])
+            header_tokens = [
+                index for index, (start, end) in enumerate(offsets)
+                if start < final_span[0] and end > header_start
+            ] if header_start >= 0 else []
+            window_start = header_tokens[0] if header_tokens else final_target_indices[0]
+        else:
+            window_start = max(0, len(ids) - max_length)
+        window_end = min(len(ids), window_start + max_length)
+        ids, labels = ids[window_start:window_end], labels[window_start:window_end]
+    if not any(label != -100 for label in labels):
+        raise ValueError("example has no supervised assistant tokens after truncation")
     return {"input_ids": ids, "labels": labels, "attention_mask": [1] * len(ids), "truncated": truncated}
 
 

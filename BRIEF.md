@@ -140,7 +140,7 @@ Streaming, one training record at a time, no concatenation of the corpus.
 
 Training, in-training evaluation and the reported validation loss all use the **same** function. Do not rely on a trainer's `assistant_only_loss` option: it needs chat templates with generation markers, and Qwen's stock template may not have them (verify against the installed tokenizer).
 
-- Render with the model's chat template. Maximum length `1024` (see §8 for the fallback), right truncation. Count and report truncated examples; do not drop them.
+- Render with the model's chat template. Maximum length `1024` (see §8 for the fallback). When a conversation exceeds the cap, retain the final assistant answer and as much recent context as fits; if the answer itself exceeds the cap, retain its beginning. Count and report truncated examples; do not drop them. This avoids batches with no supervised answer tokens.
 - **Supervised tokens:** the content of every assistant turn **plus its closing `<|im_end|>` token**. All other positions get label `-100`.
 - Required test: decode the supervised tokens of a sample and assert they equal the assistant text plus the end token.
 

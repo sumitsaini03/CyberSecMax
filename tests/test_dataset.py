@@ -84,6 +84,37 @@ def test_chat_loss_mask_uses_offsets_from_full_rendered_text():
     assert [label for label in feature["labels"] if label != -100][-1] == 2
 
 
+def test_long_prompt_truncation_keeps_final_assistant_answer_supervised():
+    tokenizer = FakeTokenizer()
+    answer = "The answer must remain in the training window."
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": "A long context. " * 100},
+        {"role": "assistant", "content": answer},
+    ]
+    feature = tokenize_supervised_example(tokenizer, messages, max_length=64)
+    supervised = [token for token, label in zip(feature["input_ids"], feature["labels"]) if label != -100]
+    assert feature["truncated"] is True
+    assert len(feature["input_ids"]) <= 64
+    assert supervised
+    assert tokenizer.decode(supervised, skip_special_tokens=False).endswith(answer + tokenizer.im_end_token)
+
+
+def test_truncation_keeps_answer_prefix_when_answer_exceeds_window():
+    tokenizer = FakeTokenizer()
+    answer = "A" * 200
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": "Question."},
+        {"role": "assistant", "content": answer},
+    ]
+    feature = tokenize_supervised_example(tokenizer, messages, max_length=64)
+    supervised = [token for token, label in zip(feature["input_ids"], feature["labels"]) if label != -100]
+    assert feature["truncated"] is True
+    assert len(feature["input_ids"]) == 64
+    assert tokenizer.decode(supervised, skip_special_tokens=False).startswith(answer[:20])
+
+
 def test_chat_loss_mask_supervises_indivisible_token_crossing_answer_start():
     class BoundaryMergeTokenizer(FakeTokenizer):
         def __call__(self, text, *, add_special_tokens=False, return_offsets_mapping=False, **kwargs):

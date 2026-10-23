@@ -538,7 +538,8 @@ def model_fingerprints(config: Mapping[str, Any], tokenizer: Any, model_revision
         "prompt_template": "CyberMetric fixed prompt v1", "scoring": "answer boundary token validation; logits or full-sequence LL",
         "decoding": {"method": "greedy_next_token"}})
     validation = fingerprint({**common, "validation_hash": validation_hash, "max_seq_length": max_length,
-        "masking": "assistant bodies plus each im_end; causal shift; fp32 token-weighted CE", "truncation": "right"})
+        "masking": "assistant bodies plus each im_end; causal shift; fp32 token-weighted CE",
+        "truncation": "keep final assistant response and most recent context; retain answer prefix if it exceeds cap"})
     qualitative = fingerprint({**common, "prompts": list(QUALITATIVE_PROMPTS), "max_new_tokens": 300, "do_sample": False})
     experiment = fingerprint({**common, "evaluation_hash": eval_hash, "validation_hash": validation_hash,
         "training_hash": train_hash, "max_seq_length": max_length, "profile": profile,
@@ -667,6 +668,9 @@ def run_preflight(root: Path, config: Mapping[str, Any], tokenizer: Any, revisio
     model = make_lora_model(base, config)
     model.train()
     batch = pad_batch(train_features[:1], tokenizer.pad_token_id)
+    supervised_tokens = int(batch["labels"].ne(-100).sum().item())
+    if supervised_tokens == 0:
+        raise ExperimentError("Preflight example has no supervised assistant tokens after truncation.")
     device = getattr(model, "device", None) or next(model.parameters()).device
     batch = {key: value.to(device) for key, value in batch.items()}
     optimizer, optimizer_name = choose_optimizer(model)
