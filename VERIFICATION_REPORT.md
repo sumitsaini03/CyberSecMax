@@ -100,7 +100,7 @@ The following results are from commands executed in this checkout; no GPU/data c
 | Command | Result |
 |---|---|
 | `python -m compileall -q train_cyber_lora.py cyber_lora_utils.py scripts tests` | **PASS** |
-| `python -m pytest -q` | **PASS**: 23 passed, 1 skipped (optional PyTorch-only test; PyTorch is absent) |
+| `python -m pytest -q` | **PASS**: 25 passed, 1 skipped (optional PyTorch-only test; PyTorch is absent) |
 | `python scripts/validate_notebook.py SecurityMaxx.ipynb` | **PASS**: nbformat 4 JSON and required workflow sections |
 | YAML parse for `configs/experiment.yaml` and `configs/scope_filter.yaml` | **PASS** |
 | `nvidia-smi` | **PASS**: RTX 3050, 6,144 MiB total; this does not verify PyTorch/CUDA compatibility or 7B fit |
@@ -109,7 +109,7 @@ The following results are from commands executed in this checkout; no GPU/data c
 
 The test suite uses synthetic samples. An optional tiny PyTorch validation-loss test is skipped when PyTorch is absent; passing synthetic tests do not prove full model compatibility.
 
-In the user's Colab on 2026-10-23, the Tesla T4 was visible and all dataset files were accessible. Primus-Instruct loaded 835 examples. Preflight then exposed a tokenizer loss-mask boundary case; the current offset-based implementation handles a single indivisible boundary token deterministically. A complete Colab preflight and GPU pilot remain pending.
+In the user's Colab on 2026-10-23, the Tesla T4 was visible and all dataset files were accessible. Primus-Instruct loaded 835 examples. Preflight exposed tokenizer loss-mask boundary cases; the current offset-based implementation handles a single indivisible boundary token deterministically and stops if a token overlaps multiple assistant spans. A later Colab run loaded the 4-bit model, then failed in qualitative baseline generation because a `BatchEncoding` was passed positionally to `model.generate`. This was fixed by passing its tensors as keyword arguments and slicing using `input_ids`. Review also found that the full-training function referenced `tokenizer.pad_token_id` without receiving `tokenizer`; its signature and call site now pass the tokenizer explicitly. Local regression tests cover generation input handling and the explicit tokenizer parameter. Local verification reports 25 passed and 1 skipped plus compile and notebook validation success. The T4 preflight and full training have not yet passed; the local environment has no PyTorch/Transformers runtime, so runtime GPU compatibility remains **UNVERIFIED**.
 
 ## 8. Expected artifacts, recovery, and known limitations
 

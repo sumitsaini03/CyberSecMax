@@ -553,13 +553,16 @@ def generate_qualitative(model: Any, tokenizer: Any, max_new_tokens: int = 300) 
     model.eval()
     for index, prompt in enumerate(QUALITATIVE_PROMPTS, start=1):
         messages = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}]
-        encoded = tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_tensors="pt")
-        encoded = encoded.to(device)
+        encoded = tokenizer.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True,
+            return_tensors="pt", return_dict=True,
+        ).to(device)
+        input_ids = encoded["input_ids"]
         with torch.no_grad():
-            generated = model.generate(encoded, max_new_tokens=max_new_tokens, do_sample=False, use_cache=True)
-        text = tokenizer.decode(generated[0, encoded.shape[-1]:], skip_special_tokens=True)
+            generated = model.generate(**encoded, max_new_tokens=max_new_tokens, do_sample=False, use_cache=True)
+        text = tokenizer.decode(generated[0, input_ids.shape[-1]:], skip_special_tokens=True)
         outputs.append({"prompt_id": index, "prompt": prompt, "response": text,
-                        "truncated_by_token_cap": generated.shape[-1] - encoded.shape[-1] >= max_new_tokens})
+                        "truncated_by_token_cap": generated.shape[-1] - input_ids.shape[-1] >= max_new_tokens})
     return outputs
 
 
@@ -707,8 +710,9 @@ def run_preflight(root: Path, config: Mapping[str, Any], tokenizer: Any, revisio
     return result
 
 
-def train_model(root: Path, config: Mapping[str, Any], train_features: Sequence[Mapping[str, Any]],
-                monitor_features: Sequence[Mapping[str, Any]], model_id: str, revision: str,
+def train_model(root: Path, config: Mapping[str, Any], tokenizer: Any,
+                train_features: Sequence[Mapping[str, Any]], monitor_features: Sequence[Mapping[str, Any]],
+                model_id: str, revision: str,
                 token: str | None, profile: str, run_fingerprint: str) -> tuple[Path, dict[str, Any]]:
     import inspect
     import torch
@@ -1149,7 +1153,7 @@ def execute(config_path: Path, *, output_override: str | None = None, preflight_
         raise ExperimentError("Training selection is empty.")
     # Update callback fingerprint used for new checkpoint markers. A different pool hash
     # cannot resume; checkpoint recovery validates this exact run fingerprint.
-    adapter_dir, train_metrics = train_model(root, config, selected_features, monitor_features,
+    adapter_dir, train_metrics = train_model(root, config, tokenizer, selected_features, monitor_features,
         config["model"]["id"], revision, token, profile, run_fingerprint)
     results = post_training_evaluation(root, config, tokenizer, revision, token, benchmark, evaluation_hash,
         evaluation_revision, val_features, baseline, adapter_dir, profile, run_fingerprint)
