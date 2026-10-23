@@ -1,0 +1,62 @@
+# Python tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Secrets and local account state
+.env
+.env.*
+!.env.example
+hf_token
+hf_token.txt
+token.txt
+!**/*token*validation*
+secrets.json
+credentials.json
+
+# Dataset and model material
+data/
+datasets/
+cache/
+**/*.parquet
+**/*.arrow
+**/*.jsonl
+**/*.safetensors
+**/*.bin
+**/*.pt
+**/*.pth
+**/*.ckpt
+**/model-*
+**/checkpoint-*/
+checkpoints/
+final/
+post_training/
+baseline/
+manual_review/
+preflight_adapter/
+final_staging_*/
+
+# Runtime output and logs
+*.log
+*.out
+*.err
+*.tmp
+wandb/
+mlruns/
+outputs/
+results.json
+samples_before_after.json
+baseline_predictions.json
+finetuned_predictions.json
+experiment_metadata.json
+COMPLETE.json
+preflight.json
+preflight_summary.json
+
+# Notebook-local state
+.ipynb_checkpoints/

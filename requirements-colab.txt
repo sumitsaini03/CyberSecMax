@@ -1,0 +1,10 @@
+# Candidate Colab stack pinned on 2026-10-23. It has NOT passed a GPU pilot
+# in the authoring environment; --preflight-only is mandatory before training.
+# Keep Colab's preinstalled torch build so the wheel stays matched to its CUDA runtime.
+transformers==5.20.2
+peft==0.21.2
+bitsandbytes==0.50.2
+datasets==5.1.0
+accelerate==1.15.0
+huggingface_hub==2.2.0
+PyYAML==6.0.3

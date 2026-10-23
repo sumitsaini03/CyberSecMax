@@ -1,0 +1,19 @@
+version: 1
+description: >-
+  Conservative keyword and regex screen for clearly offensive-only procedural
+  material. This is an imperfect triage filter and requires human review.
+rules:
+  - name: exploit_or_payload_authoring
+    pattern: '(?i)\b(write|build|craft|generate|develop|weaponize)\b.{0,100}\b(exploit|payload|shellcode|rop chain|buffer overflow)\b'
+  - name: remote_shell_or_reverse_shell
+    pattern: '(?i)\b(reverse shell|bind shell|meterpreter payload|web shell)\b'
+  - name: malware_or_implant_development
+    pattern: '(?i)\b(develop|write|build|compile|author)\b.{0,100}\b(ransomware|keylogger|rootkit|implant|trojan|stealer|botnet)\b'
+  - name: command_and_control_development
+    pattern: '(?i)\b(command.and.control|\bc2\b|beaconing)\b.{0,100}\b(implant|payload|listener|framework|server)\b'
+  - name: credential_theft_tooling
+    pattern: '(?i)\b(harvest|steal|dump|exfiltrate)\b.{0,100}\b(credentials|passwords|tokens|cookies|hashes)\b'
+  - name: evasion_of_defenses
+    pattern: '(?i)\b(bypass|evade|disable|blind)\b.{0,100}\b(edr|antivirus|endpoint detection|logging|security monitoring|defenses)\b'
+  - name: persistence_or_privilege_escalation_walkthrough
+    pattern: '(?i)\b(step.by.step|walkthrough|procedure|instructions)\b.{0,100}\b(persistence|privilege escalation|lateral movement)\b'

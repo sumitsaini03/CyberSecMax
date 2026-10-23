@@ -1,0 +1,57 @@
+project_name: cybersecurity-qlora-lab
+seed: 42
+profile: auto
+output_dir: /content/drive/MyDrive/cyber-lora
+
+model:
+  id: Qwen/Qwen2.5-7B-Instruct
+  revision: a09a35458c702b33eeacc393d103063234e8bc28
+  quantization: nf4
+  double_quant: true
+  compute_dtype: float16
+  attention_implementation: sdpa
+
+datasets:
+  benchmark_id: RISys-Lab/Benchmarks_CyberSec_CyberMetrics
+  benchmark_config: cyberMetric_500
+  benchmark_split: test
+  tier1_id: RISys-Lab/RedSage-Conv
+  tier1_config: default
+  tier2_id: trendmicro-ailab/Primus-Instruct
+  tier3_id: trendmicro-ailab/Primus-Reasoning
+  allow_tier1_training: false
+  allow_primus_training: false
+  # Set true only after reviewing HF gating conditions and applicable terms.
+  accepted_gated_dataset_conditions: false
+  accepted_teacher_output_terms: false
+  allow_general_replay: true
+  max_tier1_records: 20000
+
+training:
+  max_seq_length: 1024
+  oom_fallback_seq_length: 512
+  per_device_batch_size: 1
+  gradient_accumulation_steps: 16
+  learning_rate_t1: 0.0001
+  learning_rate_t2: 0.0002
+  epochs_t1: 1
+  epochs_t2: 3
+  lora_rank: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  warmup_ratio: 0.03
+  weight_decay: 0.01
+  max_grad_norm: 0.3
+  validation_monitor_examples: 300
+  training_budget_hours: 3.0
+  safety_margin: 0.20
+  min_training_records: 32
+  baseline_adapter_loss_tolerance: 0.001
+
+evaluation:
+  system_prompt: "You are a careful cybersecurity assistant. Answer accurately and concisely."
+  benchmark_bootstrap_resamples: 10000
+  benchmark_bootstrap_seed: 42
+  qualitative_max_new_tokens: 300
+  validation_batch_size: 1

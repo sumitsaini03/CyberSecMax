@@ -1,0 +1,21 @@
+This repository contains original orchestration code and documentation only.
+It does not include model weights, datasets, benchmark questions, or generated
+training artifacts.
+
+Upstream works and conditions to review:
+
+- Qwen2.5-7B-Instruct: Apache-2.0 model card; adapter usage remains subject to
+  the model's terms: https://huggingface.co/Qwen/Qwen2.5-7B-Instruct
+- Primus-Instruct: ODC-By dataset card; currently gated and includes GPT-4o
+  generated responses. Review the access condition and provider terms before
+  using these outputs for training:
+  https://huggingface.co/datasets/trendmicro-ailab/Primus-Instruct
+- RedSage-Conv: currently gated; its card warns of detailed offensive material
+  and does not state a license in its card metadata. Do not use until the
+  license and access terms are reviewed:
+  https://huggingface.co/datasets/RISys-Lab/RedSage-Conv
+- CyberMetric: the Hugging Face copy is a mirror and lists license "other";
+  consult the original release terms before redistribution. This project saves
+  only row-indexed predictions and a SHA-256, not benchmark text:
+  https://github.com/cybermetric/CyberMetric
+- QLoRA method: https://arxiv.org/abs/2305.14314

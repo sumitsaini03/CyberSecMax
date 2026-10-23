@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "If you use this project, cite the repository and its upstream research sources."
+title: "Cybersecurity QLoRA Lab"
+type: software
+version: 0.1.0
+date-released: 2026-10-23
+license: MIT
+abstract: >-
+  Reproducible, defensive cybersecurity QLoRA experiment pipeline with a
+  preregistered CyberMetric-500 paired evaluation protocol.
+keywords:
+  - cybersecurity
+  - QLoRA
+  - evaluation
+  - reproducibility
