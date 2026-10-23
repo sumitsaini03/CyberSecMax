@@ -2,6 +2,8 @@
 
 Reproducible, defensive cybersecurity fine-tuning experiment for `Qwen/Qwen2.5-7B-Instruct`. The project compares the original model with a QLoRA adapter under a frozen CyberMetric-500 protocol and reports measured results without requiring an accuracy or validation-loss improvement.
 
+Public repository: [sumitsaini03/CyberSecMax](https://github.com/sumitsaini03/CyberSecMax).
+
 **Current experiment status:** pending. The local authoring environment has an NVIDIA GeForce RTX 3050 (6 GiB), but no PyTorch/Transformers runtime, model weights, or authorized gated dataset token. No Qwen baseline, fine-tuning run, benchmark result, or adapter is included or implied.
 
 ## What is in this repository

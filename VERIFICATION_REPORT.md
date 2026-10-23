@@ -60,7 +60,7 @@ No source dataset rows were downloaded or committed in the authoring environment
 - PyTorch, Transformers, PEFT, Datasets, Accelerate, bitsandbytes: not installed in the authoring Python environment.
 - Hardware: `nvidia-smi` reports NVIDIA GeForce RTX 3050, 6,144 MiB total, 5,054 MiB free at the check. PyTorch/CUDA runtime compatibility and QLoRA fit remain **UNVERIFIED** because PyTorch is not installed.
 - Hugging Face credentials: `huggingface_hub.get_token()` returned no token; no dataset gate was accepted from this run.
-- GitHub CLI (`gh`): not installed. A GitHub connector is available but not connected at the time of this report.
+- GitHub CLI (`gh`): not installed. The GitHub connector returned `USER_NOT_LOGGED_IN`; the user's existing authenticated Chrome session was used for publication.
 
 ### Dataset inventory
 
@@ -121,4 +121,4 @@ If Drive is unavailable/unwritable, the program fails with a recovery message. I
 
 ## 9. GitHub publication status
 
-Local Git author identity is configured, but `gh` is unavailable and the GitHub connector returned `USER_NOT_LOGGED_IN`. No remote has been created, no push has been attempted, and no public URL or Actions result is claimed. A local commit/ZIP and exact publish steps will be included in the handoff.
+Published public repository: [sumitsaini03/CyberSecMax](https://github.com/sumitsaini03/CyberSecMax). Commit `526083a4ca1c9a41833620cc2b141636d31deae4` was pushed to `main`. GitHub Actions run `39910640515` completed successfully for the repository checks workflow. The connector itself remains unlinked; publication used the authenticated Chrome session and Git's existing credential helper.
